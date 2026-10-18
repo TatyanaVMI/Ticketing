@@ -1,0 +1,26 @@
+@using Ticketing.Models
+
+<header class="event-header">
+    <p class="event-kicker">@Event.Venue</p>
+    <h1 class="event-name">@Event.Name</h1>
+    <p class="event-artist">@Event.Artist</p>
+    <dl class="event-meta">
+        <div>
+            <dt>Date</dt>
+            <dd>@Event.DateText</dd>
+        </div>
+        <div>
+            <dt>Time</dt>
+            <dd>@Event.TimeText</dd>
+        </div>
+        <div>
+            <dt>Venue</dt>
+            <dd>@Event.Venue</dd>
+        </div>
+    </dl>
+</header>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConcertEvent Event { get; set; } = default!;
+}

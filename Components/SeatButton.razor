@@ -1,0 +1,43 @@
+@using Ticketing.Models
+
+<button type="button"
+        class="seat @StateClass"
+        disabled="@(!Seat.IsSelectable)"
+        aria-pressed="@(Seat.State == SeatState.Selected)"
+        aria-label="@AriaLabel"
+        title="@Title"
+        @onclick="OnClick">
+    @Seat.Number
+</button>
+
+@code {
+    [Parameter, EditorRequired]
+    public Seat Seat { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<Seat> OnToggle { get; set; }
+
+    private string StateClass => Seat.State switch
+    {
+        SeatState.Available => "seat--available",
+        SeatState.Selected => "seat--selected",
+        SeatState.Occupied => "seat--occupied",
+        _ => "seat--unavailable"
+    };
+
+    private string AriaLabel => Seat.State switch
+    {
+        SeatState.Occupied => $"{Seat.Label}, occupied",
+        SeatState.Unavailable => $"{Seat.Label}, unavailable",
+        _ => $"{Seat.Label}, {Seat.Price:C0}"
+    };
+
+    private string Title => Seat.State switch
+    {
+        SeatState.Occupied => "Occupied",
+        SeatState.Unavailable => "Unavailable",
+        _ => $"{Seat.Label} — {Seat.Price:C0}"
+    };
+
+    private Task OnClick() => OnToggle.InvokeAsync(Seat);
+}

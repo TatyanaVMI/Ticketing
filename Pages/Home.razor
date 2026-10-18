@@ -1,0 +1,40 @@
+﻿@page "/"
+@inject TicketingService Service
+
+<PageTitle>@Service.Event.Name — Tickets</PageTitle>
+
+<div class="ticketing">
+    <EventHeader Event="Service.Event" />
+
+    <div class="ticketing__workspace">
+        <SeatMap />
+        <SelectionSummary OnBuy="HandleBuy" />
+    </div>
+</div>
+
+<PurchaseDialog Visible="showDialog"
+                Seats="purchasedSeats"
+                Total="purchasedTotal"
+                OnClose="CloseDialog" />
+
+@code {
+    private bool showDialog;
+    private IReadOnlyList<Seat> purchasedSeats = Array.Empty<Seat>();
+    private decimal purchasedTotal;
+
+    private void HandleBuy()
+    {
+        if (!Service.CanBuy)
+        {
+            return;
+        }
+
+        purchasedSeats = Service.SelectedSeats.ToList();
+        purchasedTotal = Service.TotalPrice;
+
+        Service.Purchase();
+        showDialog = true;
+    }
+
+    private void CloseDialog() => showDialog = false;
+}

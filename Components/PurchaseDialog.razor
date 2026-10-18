@@ -1,0 +1,49 @@
+@using Ticketing.Models
+
+@if (Visible)
+{
+    <div class="dialog-overlay" @onclick="Close">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title" @onclick:stopPropagation="true">
+            <p class="dialog__eyebrow">Purchase complete</p>
+            <h2 id="dialog-title" class="dialog__title">Thank you</h2>
+            <p class="dialog__text">
+                Your @TicketWord confirmed. @Seats.Count total. Present this confirmation at the door.
+            </p>
+
+            <ul class="dialog__list">
+                @foreach (var seat in Seats)
+                {
+                    <li>
+                        <span>@seat.Label</span>
+                        <span>@seat.Price.ToString("C0")</span>
+                    </li>
+                }
+            </ul>
+
+            <div class="dialog__total">
+                <span>Total paid</span>
+                <span>@Total.ToString("C0")</span>
+            </div>
+
+            <button type="button" class="dialog__button" @onclick="Close">Done</button>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public bool Visible { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<Seat> Seats { get; set; } = Array.Empty<Seat>();
+
+    [Parameter]
+    public decimal Total { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    private string TicketWord => Seats.Count == 1 ? "ticket is" : "tickets are";
+
+    private Task Close() => OnClose.InvokeAsync();
+}

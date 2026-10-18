@@ -1,0 +1,50 @@
+@implements IDisposable
+@inject TicketingService Service
+
+<aside class="summary">
+    <h2 class="summary__title">Your selection</h2>
+
+    @if (Service.SelectedCount == 0)
+    {
+        <p class="summary__empty">No seats selected yet. Choose an available seat from the map.</p>
+    }
+    else
+    {
+        <ul class="summary__list">
+            @foreach (var seat in Service.SelectedSeats)
+            {
+                <li class="summary__item">
+                    <span class="summary__seat">@seat.Label</span>
+                    <span class="summary__price">@seat.Price.ToString("C0")</span>
+                </li>
+            }
+        </ul>
+
+        <div class="summary__total">
+            <span>Total</span>
+            <span>@Service.TotalPrice.ToString("C0")</span>
+        </div>
+    }
+
+    <button type="button"
+            class="buy"
+            disabled="@(!Service.CanBuy)"
+            @onclick="Buy">
+        @BuyText
+    </button>
+</aside>
+
+@code {
+    [Parameter]
+    public EventCallback OnBuy { get; set; }
+
+    private string BuyText => Service.SelectedCount == 0
+        ? "Buy"
+        : $"Buy {Service.SelectedCount} {(Service.SelectedCount == 1 ? "ticket" : "tickets")}";
+
+    protected override void OnInitialized() => Service.OnChange += StateHasChanged;
+
+    public void Dispose() => Service.OnChange -= StateHasChanged;
+
+    private Task Buy() => OnBuy.InvokeAsync();
+}

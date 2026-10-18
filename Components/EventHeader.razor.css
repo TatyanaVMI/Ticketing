@@ -1,0 +1,53 @@
+.event-header {
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 2rem;
+}
+
+.event-kicker {
+    margin: 0 0 0.75rem;
+    font-size: 0.75rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.event-name {
+    margin: 0;
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+}
+
+.event-artist {
+    margin: 0.5rem 0 0;
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    font-weight: 400;
+}
+
+.event-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2.5rem;
+    margin: 1.75rem 0 0;
+}
+
+.event-meta div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.event-meta dt {
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+}
+
+.event-meta dd {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 500;
+}

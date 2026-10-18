@@ -1,0 +1,24 @@
+.ticketing {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3rem 2rem 5rem;
+}
+
+.ticketing__workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    gap: 3rem;
+    align-items: start;
+    margin-top: 2.5rem;
+}
+
+@media (max-width: 900px) {
+    .ticketing {
+        padding: 2rem 1.25rem 4rem;
+    }
+
+    .ticketing__workspace {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2rem;
+    }
+}

@@ -1,0 +1,35 @@
+@using Ticketing.Models
+@implements IDisposable
+@inject TicketingService Service
+
+<section class="seat-map" aria-label="Venue seating map">
+    <div class="stage">Stage</div>
+
+    <div class="seat-rows">
+        @foreach (var row in Service.Rows)
+        {
+            <div class="seat-row">
+                <span class="row-label">@row.Key</span>
+                <div class="seat-row__seats">
+                    @foreach (var seat in row)
+                    {
+                        <SeatButton Seat="seat" OnToggle="Service.ToggleSeat" />
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <ul class="legend">
+        <li><span class="swatch swatch--available"></span>Available</li>
+        <li><span class="swatch swatch--selected"></span>Selected</li>
+        <li><span class="swatch swatch--occupied"></span>Occupied</li>
+        <li><span class="swatch swatch--unavailable"></span>Unavailable</li>
+    </ul>
+</section>
+
+@code {
+    protected override void OnInitialized() => Service.OnChange += StateHasChanged;
+
+    public void Dispose() => Service.OnChange -= StateHasChanged;
+}

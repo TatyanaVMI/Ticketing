@@ -94,6 +94,69 @@ public sealed class HostRestartTests
     }
 
     [Fact]
+    public async Task Several_purchases_survive_a_real_host_restart_unchanged()
+    {
+        await using var store = new TestStore();
+
+        var expected = new List<(int Id, decimal Total, int Seats)>();
+
+        using (var host = new TicketingAppFactory(store.StorePath))
+        {
+            using var client = host.CreateClient();
+            using var scope = host.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<TicketingService>();
+            await service.LoadAsync();
+
+            for (var index = 0; index < 2; index++)
+            {
+                var seats = service.Rows
+                    .SelectMany(row => row)
+                    .Where(seat => seat.State == SeatState.Available)
+                    .Take(2)
+                    .ToList();
+
+                Assert.Equal(2, seats.Count);
+
+                foreach (var seat in seats)
+                {
+                    await service.ToggleSeat(seat);
+                }
+
+                var outcome = await service.PurchaseAsync();
+                Assert.Equal(PurchaseOutcomeKind.Succeeded, outcome.Kind);
+
+                expected.Add((outcome.PurchaseId!.Value, seats.Sum(seat => seat.Price), seats.Count));
+            }
+        }
+
+        var before = await StoreSnapshotAsync(store);
+
+        // US1/AC3: every purchase is kept once, with its own timestamp, amount, and lines.
+        Assert.Equal(2, before.Count(line => line.StartsWith("purchase|", StringComparison.Ordinal)));
+        Assert.Equal(4, before.Count(line => line.StartsWith("line|", StringComparison.Ordinal)));
+
+        using (var host = new TicketingAppFactory(store.StorePath))
+        {
+            using var client = host.CreateClient();
+            using var scope = host.Services.CreateScope();
+            var service = scope.ServiceProvider.GetRequiredService<TicketingService>();
+            await service.LoadAsync();
+
+            Assert.Equal(before, await StoreSnapshotAsync(store));
+            Assert.Equal(32, TakenSeatIds(service).Count); // the 28 seeded seats plus four bought ones
+
+            foreach (var purchase in expected)
+            {
+                var receipt = await service.GetReceiptAsync(purchase.Id);
+
+                Assert.NotNull(receipt);
+                Assert.Equal(purchase.Total, receipt!.Total);
+                Assert.Equal(purchase.Seats, receipt.Seats.Count);
+            }
+        }
+    }
+
+    [Fact]
     public async Task An_unreadable_store_reports_an_error_and_shows_no_seats()
     {
         await using var store = new TestStore();
@@ -110,49 +173,49 @@ public sealed class HostRestartTests
     }
 
     /// <summary>
-/// Every value the store holds, as comparable text: the event, all seats with prices and statuses,
-/// and every purchase with its timestamp, total, and lines (FR-001, FR-002, FR-003, FR-005, FR-009).
-/// </summary>
-private static async Task<IReadOnlyList<string>> StoreSnapshotAsync(TestStore store)
-{
-    await using var db = await store.Factory.CreateDbContextAsync();
-
-    var rows = new List<string>();
-
-    var eventRecord = await db.Events.AsNoTracking().SingleAsync();
-    rows.Add(
-        $"event|{eventRecord.Id}|{eventRecord.Name}|{eventRecord.Artist}|{eventRecord.StartsAt:O}|{eventRecord.Venue}");
-
-    var seats = await db.Seats
-        .AsNoTracking()
-        .OrderBy(seat => seat.Row)
-        .ThenBy(seat => seat.Number)
-        .ToListAsync();
-
-    rows.AddRange(seats.Select(seat => $"seat|{seat.Row}{seat.Number}|{seat.Price}|{seat.Status}"));
-
-    var purchases = await db.Purchases
-        .AsNoTracking()
-        .OrderBy(purchase => purchase.Id)
-        .ToListAsync();
-
-    foreach (var purchase in purchases)
+    /// Every value the store holds, as comparable text: the event, all seats with prices and statuses,
+    /// and every purchase with its timestamp, total, and lines (FR-001, FR-002, FR-003, FR-005, FR-009).
+    /// </summary>
+    private static async Task<IReadOnlyList<string>> StoreSnapshotAsync(TestStore store)
     {
-        rows.Add($"purchase|{purchase.Id}|{purchase.CreatedAt:O}|{purchase.TotalAmount}");
+        await using var db = await store.Factory.CreateDbContextAsync();
 
-        var lines = await db.PurchaseLines
+        var rows = new List<string>();
+
+        var eventRecord = await db.Events.AsNoTracking().SingleAsync();
+        rows.Add(
+            $"event|{eventRecord.Id}|{eventRecord.Name}|{eventRecord.Artist}|{eventRecord.StartsAt:O}|{eventRecord.Venue}");
+
+        var seats = await db.Seats
             .AsNoTracking()
-            .Where(line => line.PurchaseId == purchase.Id)
-            .OrderBy(line => line.SeatId)
+            .OrderBy(seat => seat.Row)
+            .ThenBy(seat => seat.Number)
             .ToListAsync();
 
-        rows.AddRange(lines.Select(line => $"line|{line.SeatId}|{line.PricePaid}"));
+        rows.AddRange(seats.Select(seat => $"seat|{seat.Row}{seat.Number}|{seat.Price}|{seat.Status}"));
+
+        var purchases = await db.Purchases
+            .AsNoTracking()
+            .OrderBy(purchase => purchase.Id)
+            .ToListAsync();
+
+        foreach (var purchase in purchases)
+        {
+            rows.Add($"purchase|{purchase.Id}|{purchase.CreatedAt:O}|{purchase.TotalAmount}");
+
+            var lines = await db.PurchaseLines
+                .AsNoTracking()
+                .Where(line => line.PurchaseId == purchase.Id)
+                .OrderBy(line => line.SeatId)
+                .ToListAsync();
+
+            rows.AddRange(lines.Select(line => $"line|{line.SeatId}|{line.PricePaid}"));
+        }
+
+        return rows;
     }
 
-    return rows;
-}
-
-private static HashSet<string> TakenSeatIds(TicketingService service) =>
+    private static HashSet<string> TakenSeatIds(TicketingService service) =>
         service.Rows
             .SelectMany(row => row)
             .Where(seat => seat.State == SeatState.Occupied)

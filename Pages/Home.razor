@@ -1,5 +1,6 @@
 ﻿@page "/"
 @inject TicketingService Service
+@inject ILogger<Home> Logger
 @implements IDisposable
 
 <PageTitle>@(Service.Event?.Name ?? "Ticketing") — Tickets</PageTitle>
@@ -49,21 +50,53 @@ else
 
     private async Task HandleBuy()
     {
-        var outcome = await Service.PurchaseAsync();
+        PurchaseOutcome outcome;
+
+        try
+        {
+            outcome = await Service.PurchaseAsync();
+        }
+        catch (Exception ex)
+        {
+            // The service rolled the transaction back before rethrowing, so no seats were bought.
+            Logger.LogError(ex, "The purchase could not be completed.");
+            notice = "The purchase was not completed. No seats were bought; please try again.";
+            await Service.LoadAsync();
+            return;
+        }
 
         switch (outcome.Kind)
         {
             case PurchaseOutcomeKind.Succeeded when outcome.PurchaseId is int purchaseId:
-                // The confirmation is read back out of the store, never built from the selection (FR-014).
-                receipt = await Service.GetReceiptAsync(purchaseId);
-                showDialog = receipt is not null;
-                notice = null;
+                await ShowReceiptAsync(purchaseId);
                 break;
 
             case PurchaseOutcomeKind.SeatNoLongerAvailable:
                 notice = "A seat you chose was taken by someone else and has been removed from your selection.";
                 break;
         }
+    }
+
+    private async Task ShowReceiptAsync(int purchaseId)
+    {
+        try
+        {
+            // The confirmation is read back out of the store, never built from the selection (FR-014).
+            receipt = await Service.GetReceiptAsync(purchaseId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "The confirmation for purchase {PurchaseId} could not be read.", purchaseId);
+            receipt = null;
+            showDialog = false;
+            notice = "The purchase was recorded, but its confirmation could not be shown.";
+            return;
+        }
+
+        showDialog = receipt is not null;
+        notice = receipt is null
+            ? "The purchase was recorded, but its confirmation could not be found."
+            : null;
     }
 
     private void CloseDialog() => showDialog = false;

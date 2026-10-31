@@ -14,6 +14,7 @@ public sealed class TicketingService
     private readonly ILogger<TicketingService> _logger;
     private readonly List<Seat> _seats = new();
     private readonly HashSet<string> _selected = new(StringComparer.Ordinal);
+    private bool _purchaseInProgress;
     private int _eventId;
 
     public TicketingService(IDbContextFactory<TicketingDbContext> contextFactory, ILogger<TicketingService> logger)
@@ -38,6 +39,9 @@ public sealed class TicketingService
     public decimal TotalPrice => SelectedSeats.Sum(seat => seat.Price);
 
     public bool CanBuy => SelectedCount > 0;
+
+    /// <summary>True while a purchase is being committed; the UI must not start another one.</summary>
+    public bool IsPurchasing => _purchaseInProgress;
 
     public event Action? OnChange;
 
@@ -100,6 +104,12 @@ public sealed class TicketingService
     {
         ArgumentNullException.ThrowIfNull(seat);
 
+        // The selection is being committed: leave it untouched until the transaction settles.
+        if (_purchaseInProgress)
+        {
+            return;
+        }
+
         if (_selected.Remove(seat.Id))
         {
             seat.State = SeatState.Available;
@@ -144,10 +154,20 @@ public sealed class TicketingService
     /// </summary>
     public async Task<PurchaseOutcome> PurchaseAsync()
     {
+        // A duplicate submission (a second click, a resent form) must not start a second transaction.
+        // The UI also disables buying, but this guard protects the store on its own.
+        if (_purchaseInProgress)
+        {
+            return PurchaseOutcome.NothingSelected;
+        }
+
         if (!CanBuy)
         {
             return PurchaseOutcome.NothingSelected;
         }
+
+        _purchaseInProgress = true;
+        NotifyStateChanged();
 
         try
         {
@@ -159,6 +179,17 @@ public sealed class TicketingService
                 .OrderBy(seat => seat.Row)
                 .ThenBy(seat => seat.Number)
                 .ToListAsync();
+
+            // The selection can be lost between the CanBuy check and this read. A purchase with no
+            // seats is not a purchase, so write nothing instead of committing an empty record
+            // (FR-005, FR-008, FR-014).
+            if (_selected.Count == 0)
+            {
+                await transaction.RollbackAsync();
+                ApplySeatSnapshot(seatRecords);
+                NotifyStateChanged();
+                return PurchaseOutcome.NothingSelected;
+            }
 
             var selected = seatRecords
                 .Where(record => _selected.Contains(Key(record.Row, record.Number)))
@@ -203,6 +234,11 @@ public sealed class TicketingService
         {
             _logger.LogError(ex, "The purchase could not be committed; the transaction was rolled back.");
             throw;
+        }
+        finally
+        {
+            _purchaseInProgress = false;
+            NotifyStateChanged();
         }
     }
 

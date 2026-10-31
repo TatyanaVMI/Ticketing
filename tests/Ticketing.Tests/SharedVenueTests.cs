@@ -94,6 +94,79 @@ public sealed class SharedVenueTests
         Assert.Equal(0, await check.Purchases.CountAsync());
     }
 
+    [Fact]
+    public async Task A_refused_purchase_keeps_the_other_selected_seats()
+    {
+        await using var store = new TestStore();
+        await store.SeedAsync();
+
+        var buyer = await store.CreateServiceAsync();
+        var seats = buyer.Rows
+            .SelectMany(row => row)
+            .Where(seat => seat.State == SeatState.Available)
+            .Take(2)
+            .ToList();
+
+        foreach (var seat in seats)
+        {
+            await buyer.ToggleSeat(seat);
+        }
+
+        // Another visitor takes one of the two chosen seats directly in the store.
+        await using (var db = await store.Factory.CreateDbContextAsync())
+        {
+            var record = await db.Seats.SingleAsync(candidate => candidate.Row == seats[0].Row && candidate.Number == seats[0].Number);
+            record.Status = SeatStatus.Taken;
+            await db.SaveChangesAsync();
+        }
+
+        var outcome = await buyer.PurchaseAsync();
+
+        // The refused seat is dropped, the rest of the selection is left intact (service contract §3).
+        Assert.Equal(PurchaseOutcomeKind.SeatNoLongerAvailable, outcome.Kind);
+        var remaining = Assert.Single(buyer.SelectedSeats);
+        Assert.Equal(seats[1].Id, remaining.Id);
+        Assert.Equal(SeatState.Selected, remaining.State);
+
+        var visible = buyer.Rows.SelectMany(row => row).ToList();
+        Assert.Equal(SeatState.Occupied, visible.Single(seat => seat.Id == seats[0].Id).State);
+        Assert.Equal(SeatState.Selected, visible.Single(seat => seat.Id == seats[1].Id).State);
+
+        await using var check = await store.Factory.CreateDbContextAsync();
+        Assert.Equal(0, await check.Purchases.CountAsync());
+    }
+
+    [Fact]
+    public async Task A_selection_belongs_to_one_visitor_and_is_never_stored()
+    {
+        await using var store = new TestStore();
+        await store.SeedAsync();
+
+        var visitor = await store.CreateServiceAsync();
+        var seat = visitor.Rows
+            .SelectMany(row => row)
+            .First(candidate => candidate.State == SeatState.Available);
+
+        await visitor.ToggleSeat(seat);
+
+        Assert.Single(visitor.SelectedSeats);
+        Assert.Equal(SeatState.Selected, seat.State);
+
+        // A fresh circuit over the same store sees the seat as free: selection is session state (FR-013).
+        var reopened = await store.CreateServiceAsync();
+        var reopenedSeat = reopened.Rows.SelectMany(row => row).Single(candidate => candidate.Id == seat.Id);
+
+        Assert.Equal(SeatState.Available, reopenedSeat.State);
+        Assert.Empty(reopened.SelectedSeats);
+
+        await using var db = await store.Factory.CreateDbContextAsync();
+        var record = await db.Seats
+            .AsNoTracking()
+            .SingleAsync(candidate => candidate.Row == seat.Row && candidate.Number == seat.Number);
+
+        Assert.Equal(SeatStatus.Available, record.Status);
+    }
+
     private static IReadOnlyList<string> Snapshot(TicketingService service) =>
         service.Rows
             .SelectMany(row => row)

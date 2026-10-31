@@ -2,7 +2,7 @@ namespace Ticketing.Models;
 
 public enum PurchaseOutcomeKind
 {
-    /// <summary>Nothing was selected; the store was not touched.</summary>
+    /// <summary>Nothing was selected, or another purchase was already running; the store was not touched.</summary>
     NothingSelected,
 
     /// <summary>A selected seat was taken before the purchase committed; nothing was written.</summary>

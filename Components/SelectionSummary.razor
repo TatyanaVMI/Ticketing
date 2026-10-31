@@ -28,7 +28,7 @@
 
     <button type="button"
             class="buy"
-            disabled="@(!Service.CanBuy)"
+            disabled="@(!Service.CanBuy || Service.IsPurchasing)"
             @onclick="Buy">
         @BuyText
     </button>

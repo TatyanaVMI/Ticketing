@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Ticketing.Data;
 using Ticketing.Models;
 using Ticketing.Services;
@@ -34,6 +35,7 @@ public sealed class PurchaseStoreTests
         var purchase = Assert.Single(await db.Purchases.AsNoTracking().Include(record => record.Lines).ToListAsync());
 
         Assert.Equal(expectedTotal, purchase.TotalAmount);
+        Assert.NotEqual(default, purchase.CreatedAt);
         Assert.Equal(2, purchase.Lines.Count);
         Assert.Equal(expectedTotal, purchase.Lines.Sum(line => line.PricePaid));
 
@@ -51,6 +53,8 @@ public sealed class PurchaseStoreTests
 
         Assert.NotNull(receipt);
         Assert.Equal(expectedTotal, receipt!.Total);
+        Assert.Equal(purchase.CreatedAt, receipt.CreatedAt);
+        Assert.NotEqual(default, receipt.CreatedAt);
         Assert.Equal(
             seats.Select(seat => seat.Label).OrderBy(label => label, StringComparer.Ordinal),
             receipt.Seats.Select(line => line.Label).OrderBy(label => label, StringComparer.Ordinal));
@@ -156,10 +160,87 @@ public sealed class PurchaseStoreTests
         Assert.All(untouched, seat => Assert.Equal(SeatStatus.Available, seat.Status));
     }
 
+    [Fact]
+    public async Task A_purchase_that_was_never_recorded_has_no_receipt()
+    {
+        await using var store = new TestStore();
+        await store.SeedAsync();
+        var service = await store.CreateServiceAsync();
+
+        Assert.Null(await service.GetReceiptAsync(int.MaxValue));
+    }
+
+    [Fact]
+    public async Task A_duplicate_submission_cannot_disturb_a_running_purchase()
+    {
+        await using var store = new TestStore();
+        await store.SeedAsync();
+
+        var gate = new GatedContextFactory(store.Factory);
+        var service = new TicketingService(gate, NullLogger<TicketingService>.Instance);
+        await service.LoadAsync();
+
+        var seats = AvailableSeats(service, 2);
+        foreach (var seat in seats)
+        {
+            await service.ToggleSeat(seat);
+        }
+
+        gate.Arm();
+        var first = service.PurchaseAsync();
+        Assert.True(service.IsPurchasing);
+
+        // A second Buy click and a seat click while the first attempt is in flight are both ignored,
+        // so the store never receives a second transaction or an emptied selection.
+        var second = await service.PurchaseAsync();
+        await service.ToggleSeat(seats[0]);
+
+        Assert.Equal(PurchaseOutcomeKind.NothingSelected, second.Kind);
+        Assert.Equal(2, service.SelectedCount);
+        Assert.All(seats, seat => Assert.Equal(SeatState.Selected, seat.State));
+
+        gate.Release();
+        var outcome = await first;
+
+        Assert.Equal(PurchaseOutcomeKind.Succeeded, outcome.Kind);
+        Assert.False(service.IsPurchasing);
+
+        await using var db = await store.Factory.CreateDbContextAsync();
+        var purchase = Assert.Single(await db.Purchases.AsNoTracking().Include(record => record.Lines).ToListAsync());
+
+        Assert.Equal(2, purchase.Lines.Count);
+        Assert.Equal(seats.Sum(seat => seat.Price), purchase.TotalAmount);
+    }
+
     private static List<Seat> AvailableSeats(TicketingService service, int count) =>
         service.Rows
             .SelectMany(row => row)
             .Where(seat => seat.State == SeatState.Available)
             .Take(count)
             .ToList();
+
+    /// <summary>Holds the first context creation after <see cref="Arm"/> so a purchase can be paused mid-flight.</summary>
+    private sealed class GatedContextFactory(IDbContextFactory<TicketingDbContext> inner)
+        : IDbContextFactory<TicketingDbContext>
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _armed;
+        private int _entered;
+
+        public void Arm() => Interlocked.Exchange(ref _armed, 1);
+
+        public void Release() => _gate.TrySetResult();
+
+        public TicketingDbContext CreateDbContext() => inner.CreateDbContext();
+
+        public async Task<TicketingDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        {
+            if (Volatile.Read(ref _armed) == 1 && Interlocked.Increment(ref _entered) == 1)
+            {
+                await _gate.Task.WaitAsync(cancellationToken);
+            }
+
+            return await inner.CreateDbContextAsync(cancellationToken);
+        }
+    }
 }

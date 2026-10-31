@@ -13,7 +13,7 @@
                 <div class="seat-row__seats">
                     @foreach (var seat in row)
                     {
-                        <SeatButton Seat="seat" OnToggle="Service.ToggleSeat" />
+                        <SeatButton Seat="seat" Busy="Service.IsPurchasing" OnToggle="Service.ToggleSeat" />
                     }
                 </div>
             </div>

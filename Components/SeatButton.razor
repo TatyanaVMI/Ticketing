@@ -2,7 +2,7 @@
 
 <button type="button"
         class="seat @StateClass"
-        disabled="@(!Seat.IsSelectable)"
+        disabled="@(Busy || !Seat.IsSelectable)"
         aria-pressed="@(Seat.State == SeatState.Selected)"
         aria-label="@AriaLabel"
         title="@Title"
@@ -13,6 +13,10 @@
 @code {
     [Parameter, EditorRequired]
     public Seat Seat { get; set; } = default!;
+
+    /// <summary>True while a purchase is running, so the seat map cannot change underneath it.</summary>
+    [Parameter]
+    public bool Busy { get; set; }
 
     [Parameter]
     public EventCallback<Seat> OnToggle { get; set; }

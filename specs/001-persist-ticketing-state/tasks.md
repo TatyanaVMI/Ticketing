@@ -259,3 +259,13 @@ works in `Data/TicketingSeeder.cs` and `tests/VenueSeedTests.cs`.
 - Deliberately not in scope, so nobody adds them by reflex: concurrency protection (spec Assumptions),
   accessibility remediation (spec Clarifications 2026-10-25, Q2), any purchase code or "my tickets"
   lookup (FR-018), and any live push between visitors (spec Clarifications 2026-10-31)
+
+---
+
+## Phase 7: Convergence
+
+- [X] T038 Snapshot the whole stored state in `tests/Ticketing.Tests/HostRestartTests.cs` before the host is disposed — the event (`Name`, `Artist`, `StartsAt`, `Venue`), all 120 seats (`Row`, `Number`, `Price`, `Status`), and every purchase with its `CreatedAt`, `TotalAmount`, and lines — then rebuild the host over the same file and assert every captured value is identical, and assert the served page still renders the event and the bought seat as occupied — per FR-001, FR-002, FR-003, FR-005, FR-009, FR-017, SC-009 (partial)
+- [X] T039 Extend `tests/Ticketing.Tests/VenueSeedTests.cs` `Starting_again_over_a_populated_store_changes_nothing` to assert the purchase row, its lines, `TotalAmount`, and `CreatedAt` still exist unchanged after two further `SeedAsync` runs — per FR-011, SC-007 (partial)
+- [X] T040 Add a repository-level CI workflow (for example `.github/workflows/ci.yml`) that runs `dotnet restore`, `dotnet build --no-restore`, and `dotnet test --no-build` for `Ticketing.sln` on every push and pull request, so the guarantees are confirmed automatically whenever the project changes — per FR-017, SC-009 (missing)
+- [X] T041 Remove the CSS rules in `wwwroot/css/app.css` that no rendered markup uses after `wwwroot/index.html` was deleted — `.loading-progress`, `.loading-progress circle`, `.loading-progress-text`, and `.blazor-error-boundary` — while keeping `#blazor-error-ui`, which `App.razor` renders — per T032, Constitution V (partial)
+- [X] T042 Filter or order the event lookup in `Services/TicketingService.LoadAsync` (for example `OrderBy(eventRecord => eventRecord.Id)` or an explicit single-row predicate) so EF Core no longer logs `Query[10103]` on every load and the event choice is deterministic — per Constitution VI, T033 (partial)

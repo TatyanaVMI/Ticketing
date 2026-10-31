@@ -51,7 +51,10 @@ public sealed class TicketingService
         {
             await using var db = await _contextFactory.CreateDbContextAsync();
 
-            var eventRecord = await db.Events.AsNoTracking().FirstOrDefaultAsync();
+            var eventRecord = await db.Events
+                .AsNoTracking()
+                .OrderBy(record => record.Id)
+                .FirstOrDefaultAsync();
             if (eventRecord is null)
             {
                 Fail("The venue has not been created yet, so no seats can be shown.");

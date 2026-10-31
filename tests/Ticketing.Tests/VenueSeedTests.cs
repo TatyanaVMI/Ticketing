@@ -104,12 +104,16 @@ public sealed class VenueSeedTests
         var outcome = await service.PurchaseAsync();
         Assert.Equal(PurchaseOutcomeKind.Succeeded, outcome.Kind);
 
+        var purchaseId = outcome.PurchaseId!.Value;
+
         var before = await InventoryAsync(store);
+        var purchaseBefore = await PurchaseSnapshotAsync(store, purchaseId);
 
         await store.SeedAsync();
         await store.SeedAsync();
 
         Assert.Equal(before, await InventoryAsync(store));
+        Assert.Equal(purchaseBefore, await PurchaseSnapshotAsync(store, purchaseId));
         Assert.Equal(120, before.Count);
         Assert.Equal(29, before.Count(line => line.EndsWith("|Taken", StringComparison.Ordinal)));
     }
@@ -124,5 +128,34 @@ public sealed class VenueSeedTests
             .ThenBy(seat => seat.Number)
             .Select(seat => $"{seat.Row}{seat.Number}|{seat.Price}|{seat.Status}")
             .ToListAsync();
+    }
+
+    /// <summary>
+    /// The committed purchase with its timestamp, amount, and lines — the history a later start must
+    /// leave exactly as it is (SC-007).
+    /// </summary>
+    private static async Task<List<string>> PurchaseSnapshotAsync(TestStore store, int purchaseId)
+    {
+        await using var db = await store.Factory.CreateDbContextAsync();
+
+        var purchase = await db.Purchases
+            .AsNoTracking()
+            .SingleAsync(record => record.Id == purchaseId);
+
+        var rows = new List<string>
+        {
+            $"purchase|{purchase.Id}|{purchase.CreatedAt:O}|{purchase.TotalAmount}"
+        };
+
+        var lines = await db.PurchaseLines
+            .AsNoTracking()
+            .Where(line => line.PurchaseId == purchaseId)
+            .OrderBy(line => line.SeatId)
+            .Select(line => $"{line.SeatId}|{line.PricePaid}")
+            .ToListAsync();
+
+        rows.AddRange(lines.Select(line => $"line|{line}"));
+
+        return rows;
     }
 }

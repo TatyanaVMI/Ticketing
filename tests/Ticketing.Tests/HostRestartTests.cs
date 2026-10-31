@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Ticketing.Data;
 using Ticketing.Models;
 using Ticketing.Services;
 
@@ -19,6 +21,7 @@ public sealed class HostRestartTests
         decimal expectedTotal;
         HashSet<string> takenBefore;
         string boughtSeatLabel;
+        IReadOnlyList<string> stateBefore;
 
         using (var host = new TicketingAppFactory(store.StorePath))
         {
@@ -52,6 +55,12 @@ public sealed class HostRestartTests
 
             takenBefore = TakenSeatIds(service);
             Assert.Equal(30, takenBefore.Count); // the 28 seeded seats plus the two just bought
+
+            // The whole stored state — event, all seats with prices and statuses, every purchase and
+            // its lines — captured before the restart, so FR-009 can be compared value for value.
+            stateBefore = await StoreSnapshotAsync(store);
+            Assert.Equal(120, stateBefore.Count(line => line.StartsWith("seat|", StringComparison.Ordinal)));
+            Assert.Single(stateBefore, line => line.StartsWith("purchase|", StringComparison.Ordinal));
         }
 
         using (var host = new TicketingAppFactory(store.StorePath))
@@ -65,6 +74,11 @@ public sealed class HostRestartTests
             // SC-001: not a single taken seat was lost across the restart.
             Assert.Equal(takenBefore, TakenSeatIds(service));
 
+            // FR-001, FR-002, FR-003, FR-005, FR-009: the event, all 120 seats with their prices and
+            // statuses, and every purchase with its timestamp, amount, and lines are byte-for-byte
+            // the same state the store held before the restart.
+            Assert.Equal(stateBefore, await StoreSnapshotAsync(store));
+
             // SC-002: the purchase still returns the same seats and the same amount.
             var receipt = await service.GetReceiptAsync(purchaseId);
             Assert.NotNull(receipt);
@@ -72,9 +86,10 @@ public sealed class HostRestartTests
             Assert.Equal(2, receipt.Seats.Count);
             Assert.Contains(receipt.Seats, line => line.Label == boughtSeatLabel);
 
-            // The served page no longer offers the bought seat.
+            // The served page no longer offers the bought seat, and still shows the stored event.
             var html = await client.GetStringAsync("/");
             Assert.Contains($"{boughtSeatLabel}, occupied", html);
+            Assert.Contains(TicketingSeeder.EventName, html);
         }
     }
 
@@ -94,7 +109,50 @@ public sealed class HostRestartTests
         Assert.DoesNotContain("Row A, Seat", html);
     }
 
-    private static HashSet<string> TakenSeatIds(TicketingService service) =>
+    /// <summary>
+/// Every value the store holds, as comparable text: the event, all seats with prices and statuses,
+/// and every purchase with its timestamp, total, and lines (FR-001, FR-002, FR-003, FR-005, FR-009).
+/// </summary>
+private static async Task<IReadOnlyList<string>> StoreSnapshotAsync(TestStore store)
+{
+    await using var db = await store.Factory.CreateDbContextAsync();
+
+    var rows = new List<string>();
+
+    var eventRecord = await db.Events.AsNoTracking().SingleAsync();
+    rows.Add(
+        $"event|{eventRecord.Id}|{eventRecord.Name}|{eventRecord.Artist}|{eventRecord.StartsAt:O}|{eventRecord.Venue}");
+
+    var seats = await db.Seats
+        .AsNoTracking()
+        .OrderBy(seat => seat.Row)
+        .ThenBy(seat => seat.Number)
+        .ToListAsync();
+
+    rows.AddRange(seats.Select(seat => $"seat|{seat.Row}{seat.Number}|{seat.Price}|{seat.Status}"));
+
+    var purchases = await db.Purchases
+        .AsNoTracking()
+        .OrderBy(purchase => purchase.Id)
+        .ToListAsync();
+
+    foreach (var purchase in purchases)
+    {
+        rows.Add($"purchase|{purchase.Id}|{purchase.CreatedAt:O}|{purchase.TotalAmount}");
+
+        var lines = await db.PurchaseLines
+            .AsNoTracking()
+            .Where(line => line.PurchaseId == purchase.Id)
+            .OrderBy(line => line.SeatId)
+            .ToListAsync();
+
+        rows.AddRange(lines.Select(line => $"line|{line.SeatId}|{line.PricePaid}"));
+    }
+
+    return rows;
+}
+
+private static HashSet<string> TakenSeatIds(TicketingService service) =>
         service.Rows
             .SelectMany(row => row)
             .Where(seat => seat.State == SeatState.Occupied)

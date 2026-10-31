@@ -12,6 +12,42 @@
     margin-top: 2.5rem;
 }
 
+.ticketing__notice {
+    margin: 1.5rem 0 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 0.35rem;
+    font-size: 0.875rem;
+    color: var(--ink-soft);
+}
+
+.venue-loading {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 3rem 2rem;
+    color: var(--ink-muted);
+}
+
+.venue-error {
+    max-width: 36rem;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+}
+
+.venue-error__title {
+    margin: 0 0 0.75rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.venue-error__text {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    color: var(--ink-soft);
+}
+
 @media (max-width: 900px) {
     .ticketing {
         padding: 2rem 1.25rem 4rem;
@@ -20,5 +56,9 @@
     .ticketing__workspace {
         grid-template-columns: minmax(0, 1fr);
         gap: 2rem;
+    }
+
+    .venue-error {
+        padding: 3rem 1.25rem;
     }
 }

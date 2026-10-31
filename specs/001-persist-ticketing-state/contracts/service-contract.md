@@ -25,6 +25,7 @@ Applies to `Services/TicketingService.cs` (scoped per circuit).
 | `IsLoaded` | True when a venue was read successfully and may be shown. |
 | `LoadError` | Non-null when the venue could not be read. When it is set, the UI MUST NOT render seats, the selection summary, or the buy action (FR-015, SC-008). |
 | `Event` | The current event, or null before a successful load. |
+| `Task<PurchaseReceipt?> GetReceiptAsync(int purchaseId)` | Reads a committed purchase back out of the store with its seats and the prices actually paid. Returns null when no such purchase exists. This is the only source of the confirmation (FR-014). |
 | `Rows` | Seats grouped by row, in row order, each seat carrying its current visible state. Read-only. |
 | `SelectedSeats` | This circuit's chosen seats, in stable order. Empty until the visitor chooses. |
 | `SelectedCount`, `TotalPrice` | Derived from `SelectedSeats` and the stored prices. Never cached across a grab-bag of renders. |

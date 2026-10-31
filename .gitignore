@@ -35,3 +35,6 @@ out/
 *.nupkg
 packages/
 !packages/build/
+
+## Runtime state (the ticketing store is never committed)
+App_Data/

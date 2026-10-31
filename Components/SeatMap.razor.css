@@ -84,8 +84,3 @@
     background: var(--gray-300);
     border: 1.5px solid var(--gray-300);
 }
-
-.swatch--unavailable {
-    background: transparent;
-    border: 1.5px dashed var(--gray-300);
-}

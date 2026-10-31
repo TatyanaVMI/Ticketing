@@ -9,7 +9,9 @@ public class Seat
 
     public string Id => $"{Row}{Number}";
 
-    public string Label => $"Row {Row}, Seat {Number}";
+    public string Label => LabelFor(Row, Number);
 
     public bool IsSelectable => State is SeatState.Available or SeatState.Selected;
+
+    public static string LabelFor(string row, int number) => $"Row {row}, Seat {number}";
 }

@@ -1,40 +1,72 @@
 ﻿@page "/"
 @inject TicketingService Service
+@implements IDisposable
 
-<PageTitle>@Service.Event.Name — Tickets</PageTitle>
+<PageTitle>@(Service.Event?.Name ?? "Ticketing") — Tickets</PageTitle>
 
-<div class="ticketing">
-    <EventHeader Event="Service.Event" />
+@if (Service.LoadError is not null)
+{
+    <section class="venue-error" role="alert">
+        <h1 class="venue-error__title">The venue is not available</h1>
+        <p class="venue-error__text">@Service.LoadError</p>
+    </section>
+}
+else if (!Service.IsLoaded)
+{
+    <p class="venue-loading">Loading the venue…</p>
+}
+else
+{
+    <div class="ticketing">
+        <EventHeader Event="Service.Event!" />
 
-    <div class="ticketing__workspace">
-        <SeatMap />
-        <SelectionSummary OnBuy="HandleBuy" />
+        @if (notice is not null)
+        {
+            <p class="ticketing__notice" role="status">@notice</p>
+        }
+
+        <div class="ticketing__workspace">
+            <SeatMap />
+            <SelectionSummary OnBuy="HandleBuy" />
+        </div>
     </div>
-</div>
+}
 
-<PurchaseDialog Visible="showDialog"
-                Seats="purchasedSeats"
-                Total="purchasedTotal"
-                OnClose="CloseDialog" />
+<PurchaseDialog Visible="showDialog" Receipt="receipt" OnClose="CloseDialog" />
 
 @code {
     private bool showDialog;
-    private IReadOnlyList<Seat> purchasedSeats = Array.Empty<Seat>();
-    private decimal purchasedTotal;
+    private PurchaseReceipt? receipt;
+    private string? notice;
 
-    private void HandleBuy()
+    protected override async Task OnInitializedAsync()
     {
-        if (!Service.CanBuy)
+        Service.OnChange += OnServiceChanged;
+        await Service.LoadAsync();
+    }
+
+    private void OnServiceChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task HandleBuy()
+    {
+        var outcome = await Service.PurchaseAsync();
+
+        switch (outcome.Kind)
         {
-            return;
+            case PurchaseOutcomeKind.Succeeded when outcome.PurchaseId is int purchaseId:
+                // The confirmation is read back out of the store, never built from the selection (FR-014).
+                receipt = await Service.GetReceiptAsync(purchaseId);
+                showDialog = receipt is not null;
+                notice = null;
+                break;
+
+            case PurchaseOutcomeKind.SeatNoLongerAvailable:
+                notice = "A seat you chose was taken by someone else and has been removed from your selection.";
+                break;
         }
-
-        purchasedSeats = Service.SelectedSeats.ToList();
-        purchasedTotal = Service.TotalPrice;
-
-        Service.Purchase();
-        showDialog = true;
     }
 
     private void CloseDialog() => showDialog = false;
+
+    public void Dispose() => Service.OnChange -= OnServiceChanged;
 }

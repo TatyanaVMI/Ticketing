@@ -38,9 +38,23 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
-    private string ConfirmationText => Receipt is { Seats.Count: 1 }
-        ? "Your ticket is confirmed."
-        : "Your tickets are confirmed.";
+    /// <summary>
+    /// Only the door sentence is dropped from the original wording (FR-018); the purchased count stays,
+    /// read from the recorded purchase, so the confirmation changes in the two ways FR-016 allows.
+    /// </summary>
+    private string ConfirmationText
+    {
+        get
+        {
+            if (Receipt is not { } receipt)
+            {
+                return "Your tickets are confirmed.";
+            }
+
+            var ticketWord = receipt.Seats.Count == 1 ? "ticket is" : "tickets are";
+            return $"Your {ticketWord} confirmed. {receipt.Seats.Count} total.";
+        }
+    }
 
     private Task Close() => OnClose.InvokeAsync();
 }

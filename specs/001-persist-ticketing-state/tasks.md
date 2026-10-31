@@ -269,3 +269,9 @@ works in `Data/TicketingSeeder.cs` and `tests/VenueSeedTests.cs`.
 - [X] T040 Add a repository-level CI workflow (for example `.github/workflows/ci.yml`) that runs `dotnet restore`, `dotnet build --no-restore`, and `dotnet test --no-build` for `Ticketing.sln` on every push and pull request, so the guarantees are confirmed automatically whenever the project changes — per FR-017, SC-009 (missing)
 - [X] T041 Remove the CSS rules in `wwwroot/css/app.css` that no rendered markup uses after `wwwroot/index.html` was deleted — `.loading-progress`, `.loading-progress circle`, `.loading-progress-text`, and `.blazor-error-boundary` — while keeping `#blazor-error-ui`, which `App.razor` renders — per T032, Constitution V (partial)
 - [X] T042 Filter or order the event lookup in `Services/TicketingService.LoadAsync` (for example `OrderBy(eventRecord => eventRecord.Id)` or an explicit single-row predicate) so EF Core no longer logs `Query[10103]` on every load and the event choice is deterministic — per Constitution VI, T033 (partial)
+
+---
+
+## Phase 8: Convergence
+
+- [X] T043 Restore the purchased-seat count sentence in `Components/PurchaseDialog.razor` (for example `Your tickets are confirmed. 2 total.`) built from `Receipt.Seats.Count`, so that removing "Present this confirmation at the door" stays the only wording change the confirmation undergoes, alongside the unavailable state disappearing from the seat map — per FR-016, SC-010 (partial)
